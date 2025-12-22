@@ -2,7 +2,7 @@ import argparse
 import numpy as np
 from grid_env import GridEnv
 import os
-import time
+import time #aaa
 
 # print_grid_step: コンソールにグリッドの現在状態を描画する補助関数
 # - env: GridEnv インスタンス（グリッド幅、高さ、災害・避難所位置を参照）
