@@ -2,17 +2,55 @@ import argparse
 import numpy as np
 import os
 from grid_env import GridEnv
+from gemini_disaster_selector import (
+    select_disaster_nodes,
+    nodes_to_disasters
+)
 
 
 def train(args):
+    #仮のノード変更する
+    osm_nodes = [
+        {"id": 1, "x": 1, "y": 1, "type": "a"},
+        {"id": 2, "x": 2, "y": 1, "type": "b"},
+        {"id": 3, "x": 3, "y": 2, "type": "c"},
+        {"id": 4, "x": 0, "y": 2, "type": "d"},
+        {"id": 5, "x": 3, "y": 1, "type": "e"},
+        {"id": 6, "x": 3, "y": 2, "type": "f"},
+        {"id": 7, "x": 2, "y": 3, "type": "g"},
+    ]
+
     shelters = []
     if args.shelters:
         for s in args.shelters.split(';'):
             x, y = map(int, s.split(','))
             shelters.append(y * args.width + x)
 
-    env = GridEnv(width=args.width, height=args.height, shelters=shelters,
-                  n_disasters=args.n_disasters, max_steps=args.max_steps, randomize_disasters=False, seed=args.seed)
+    # --- Gemini による災害ノード選択 ---
+    selected_ids = select_disaster_nodes(
+        osm_nodes,
+        n_disasters=args.n_disasters
+    )
+
+    # ノードID → GridEnv用 disasters
+    disasters = nodes_to_disasters(
+        osm_nodes,
+        selected_ids,
+        width=args.width
+    )
+
+
+    '''env = GridEnv(width=args.width, height=args.height, shelters=shelters,
+                  n_disasters=args.n_disasters, max_steps=args.max_steps, randomize_disasters=False, seed=args.seed)'''
+    env = GridEnv(
+        width=args.width,
+        height=args.height,
+        shelters=shelters,
+        disasters=disasters,   #Geminiが選んだ災害
+        max_steps=args.max_steps,
+        seed=args.seed
+    )
+
 
     n_states = env.n_states
     n_actions = env.n_actions
