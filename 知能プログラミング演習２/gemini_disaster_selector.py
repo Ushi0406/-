@@ -41,3 +41,17 @@ def select_disaster_nodes(osm_nodes, n_disasters=3):
     text = response.text.strip()
     ids = [int(x) for x in text.split(",") if x.strip().isdigit()]
     return ids
+
+def nodes_to_disasters(osm_nodes, selected_ids, width):
+    """
+    Geminiが選んだノードID → GridEnv用 disasters（state index）
+    """
+    id_to_node = {n["id"]: n for n in osm_nodes}
+    disasters = []
+
+    for nid in selected_ids:
+        node = id_to_node[nid]
+        state = node["y"] * width + node["x"]
+        disasters.append(state)
+
+    return disasters
