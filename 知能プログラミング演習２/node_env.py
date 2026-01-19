@@ -106,3 +106,19 @@ print(f"Saved plot to {output_path}")
 
 # 表示する場合は以下の行のコメントを外してください
 plt.show()
+
+def load_reduced_nodes():
+    """
+    reduced ノードを Gemini 用の辞書配列として返す
+    """
+    nodes = []
+
+    for idx, row in gdf_nodes_reduced.iterrows():
+        nodes.append({
+            "id": int(idx),                  # OSM node id
+            "x": float(row.geometry.x),      # Web Mercator x
+            "y": float(row.geometry.y),      # Web Mercator y
+            "type": "intersection"           # 今回は固定
+        })
+
+    return nodes
