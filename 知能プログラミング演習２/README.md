@@ -24,7 +24,9 @@ python run_demo.py --model model/q_table.npy --width 5 --height 5 --n_disasters 
 注意点：このサンプル実装では災害マップは初期化時にランダムで配置され、トレーニング中は固定されます（`randomize_disasters=False`）。複数の災害配置に対して一般化させたい場合は`train_q_learning.py`を改良してください。
 
 node_env.py：地図データ作成
+
 disaster_selector_local.py：災害発生場所を決める(建物との距離に近いほど確率高い)
+
 run_select_disaster.py：シミュレーション実行用
 
 
