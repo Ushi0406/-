@@ -1,6 +1,8 @@
 import osmnx as ox
 import matplotlib.pyplot as plt
 import contextily as ctx
+import geopandas as gpd
+import numpy as np
 
 place_name = "名古屋工業大学, 愛知県, 日本"
 
@@ -45,6 +47,7 @@ gdf_edges['length_m'] = gdf_edges.geometry.length
 length_thr = gdf_edges['length_m'].quantile(EDGE_LENGTH_QUANTILE)
 gdf_edges_reduced = gdf_edges[gdf_edges['length_m'] >= length_thr]
 
+
 # サンプリング
 if 0 < EDGE_SAMPLE_FRAC < 1 and len(gdf_edges_reduced) > 0:
     gdf_edges_reduced = gdf_edges_reduced.sample(frac=EDGE_SAMPLE_FRAC, random_state=1)
@@ -64,6 +67,28 @@ else:
         gdf_nodes_reduced = gdf_nodes.sample(frac=NODE_SAMPLE_FRAC, random_state=1)
     else:
         gdf_nodes_reduced = gdf_nodes.copy()
+
+# ================= 建物データ取得 =================
+print("Loading building footprints...")
+buildings = ox.features_from_place(place_name, tags={"building": True})
+buildings = buildings.to_crs(epsg=3857)
+
+# 建物ポリゴンのみ
+buildings = buildings[buildings.geometry.notnull()]
+
+# ノードもCRS確認
+gdf_nodes_reduced = gdf_nodes_reduced.to_crs(epsg=3857)
+
+# 各ノードから最寄り建物までの距離（m）を計算
+gdf_nodes_reduced = gpd.sjoin_nearest(
+    gdf_nodes_reduced,
+    buildings[["geometry"]],
+    how="left",
+    distance_col="dist_to_building_m"
+)
+
+print("Building distance added to nodes")
+# ==================================================
 
 # 出力（プロット用に reduced CSV と TXT を保存）
 gdf_nodes_reduced.to_csv("nodes_reduced.csv", index=True)
@@ -115,10 +140,11 @@ def load_reduced_nodes():
 
     for idx, row in gdf_nodes_reduced.iterrows():
         nodes.append({
-            "id": int(idx),                  # OSM node id
-            "x": float(row.geometry.x),      # Web Mercator x
-            "y": float(row.geometry.y),      # Web Mercator y
-            "type": "intersection"           # 今回は固定
+            "id": int(idx),
+            "x": float(row.geometry.x),
+            "y": float(row.geometry.y),
+            "type": "intersection",
+            "dist_to_building": float(row.get("dist_to_building_m", 9999))
         })
 
     return nodes
@@ -142,10 +168,11 @@ def plot_with_selected(selected_osm_ids, out_path="grid_env_selected.png"):
         sel.plot(ax=ax, markersize=80, color="yellow", edgecolor="black", zorder=4)
 
         # ラベル（OSM IDの末尾だけ表示）
-        for osm_id, row in sel.iterrows():
+        '''for osm_id, row in sel.iterrows():
             x = row.geometry.x
             y = row.geometry.y
-            ax.text(x, y, str(osm_id)[-4:], fontsize=10, color="black", zorder=5)
+
+            ax.text(x, y, str(osm_id)[-4:], fontsize=10, color="black", zorder=5)'''
 
     # 範囲
     if len(plot_edges) > 0:
