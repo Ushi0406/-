@@ -1,6 +1,7 @@
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 import torch
 import re
+import numpy as np
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -9,46 +10,34 @@ MODEL_NAME = "google/flan-t5-base"
 tokenizer = T5Tokenizer.from_pretrained(MODEL_NAME)
 model = T5ForConditionalGeneration.from_pretrained(MODEL_NAME).to(device)
 
-def select_disaster_nodes(osm_nodes, n_disasters=3):
+def select_disaster_nodes(osm_nodes, n_disasters=1):
     """
-    LLM（ローカル）に災害ノードを選ばせる
-    osm_nodes: [{"id":int,"x":float,"y":float,"type":str}, ...]
-    戻り値: ノードIDのリスト
+    建物に近いほど災害が起きやすい
+    1か所だけ重み付きランダムで選ぶ
     """
 
-    # ノード一覧をテキスト化
-    node_desc = "\n".join(
-        [f"id:{n['id']} (x={n['x']:.1f}, y={n['y']:.1f}), type={n['type']}"
-         for n in osm_nodes]
-    )
+    scores = []
 
-    prompt = f"""
-以下は避難シミュレーション用の地図ノードです。
-洪水・火災・倒壊の危険が高そうな場所を {n_disasters} 個選んでください。
+    for n in osm_nodes:
+        dist = n.get("dist_to_building", 9999)  # 建物からの距離
 
-条件:
-- 出力はノードIDのみ（カンマ区切り）
+        # 🔥 建物に近いほど値が大きくなるスコア
+        score = 1 / (dist + 20)
 
-ノード一覧:
-{node_desc}
+        scores.append(score)
 
-出力例:
-"""
+    scores = np.array(scores)
 
-    # トークン化
-    input_ids = tokenizer(prompt, return_tensors="pt", truncation=True).input_ids.to(device)
+    # 確率に変換
+    probs = scores / scores.sum()
 
-    # LLM生成
-    outputs = model.generate(
-        input_ids,
-        max_length=128,
-        do_sample=False
-    )
+    # 🎯 1か所だけ抽選（replace=Falseで重複なし）
+    chosen_index = np.random.choice(
+        len(osm_nodes),
+        size=1,
+        replace=False,
+        p=probs
+    )[0]
 
-    output_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print("LLM output:", output_text)
-
-    # 数字だけ抽出
-    ids = [int(x) for x in re.findall(r'\d+', output_text)]
-
-    return ids[:n_disasters]
+    # ノードIDをリストで返す（今のrun_select_disaster.pyと互換性を保つため）
+    return [osm_nodes[chosen_index]["id"]]
