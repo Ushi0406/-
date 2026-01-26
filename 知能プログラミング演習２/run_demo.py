@@ -1,9 +1,34 @@
 import argparse
 import numpy as np
-from grid_env import GridEnv
 import os
 import time #aaa
 
+# ===== LLM 避難指示生成の準備 =====
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+tokenizer = T5Tokenizer.from_pretrained("google/flan-t5-small")
+model_llm = T5ForConditionalGeneration.from_pretrained("google/flan-t5-small").to(device)
+
+#避難指示生成仮
+def generate_evacuation_text(path, env):
+    coords = [(p % env.w, p // env.w) for p in path]
+
+    prompt = f"""
+あなたは防災ナビゲーションAIです。
+以下は避難者の移動経路です。
+
+開始地点から避難所までの避難指示を日本語でわかりやすく説明してください。
+
+移動経路:
+{coords}
+
+避難指示:
+"""
+
+    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(device)
+    outputs = model_llm.generate(input_ids, max_length=150)
+    text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return text
+    
 # print_grid_step: コンソールにグリッドの現在状態を描画する補助関数
 # - env: GridEnv インスタンス（グリッド幅、高さ、災害・避難所位置を参照）
 # - current_pos: 現在の状態インデックス（0..w*h-1）
@@ -134,3 +159,12 @@ if __name__ == '__main__':
     path, done = greedy_run(env, Q, start=start_pos, delay=args.delay)
     print('Reached shelter:', done)
     print_path(env, path)
+
+#以下避難指示仮
+path, done = greedy_run(env, Q, start=start_pos, delay=args.delay)
+print('Reached shelter:', done)
+print_path(env, path)
+
+print("\n避難ナビゲーションAIからの指示")
+evac_text = generate_evacuation_text(path, env)
+print(evac_text)
