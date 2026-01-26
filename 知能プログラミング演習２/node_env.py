@@ -122,3 +122,40 @@ def load_reduced_nodes():
         })
 
     return nodes
+
+def plot_with_selected(selected_osm_ids, out_path="grid_env_selected.png"):
+    """
+    選ばれたOSMノードIDを地図上で強調表示して保存する
+    """
+    fig, ax = plt.subplots(figsize=(8, 8))
+
+    # エッジ
+    plot_edges = gdf_edges_reduced if len(gdf_edges_reduced) > 0 else gdf_edges
+    plot_edges.plot(ax=ax, linewidth=1, edgecolor="red", zorder=2)
+
+    # ノード（全体）
+    gdf_nodes_reduced.plot(ax=ax, markersize=20, color="blue", zorder=3)
+
+    # 選ばれたノードだけ強調（黄色）
+    sel = gdf_nodes_reduced[gdf_nodes_reduced.index.isin(selected_osm_ids)]
+    if len(sel) > 0:
+        sel.plot(ax=ax, markersize=80, color="yellow", edgecolor="black", zorder=4)
+
+        # ラベル（OSM IDの末尾だけ表示）
+        for osm_id, row in sel.iterrows():
+            x = row.geometry.x
+            y = row.geometry.y
+            ax.text(x, y, str(osm_id)[-4:], fontsize=10, color="black", zorder=5)
+
+    # 範囲
+    if len(plot_edges) > 0:
+        xmin, ymin, xmax, ymax = plot_edges.total_bounds
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+
+    ctx.add_basemap(ax, source=ctx.providers.OpenStreetMap.Mapnik, crs=plot_edges.crs, zorder=1)
+    ax.set_axis_off()
+
+    fig.savefig(out_path, dpi=300, bbox_inches="tight")
+    print(f"Saved selected plot to {out_path}")
+    plt.close(fig)
