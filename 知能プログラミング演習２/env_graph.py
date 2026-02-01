@@ -1,14 +1,32 @@
 # env_graph.py
 import networkx as nx
+import numpy as np
+
+def choose_nearer_shelter(G, start_id, shelter_ids, weight="length"):
+    """
+    開始ノード start_id から複数の避難所候補 shelter_ids までの
+    最短距離を比較し、一番近い避難所IDを返す
+    """
+    lengths = []
+
+    for sid in shelter_ids:
+        try:
+            L = nx.shortest_path_length(G, start_id, sid, weight=weight)
+        except nx.NetworkXNoPath:
+            L = float("inf")
+        lengths.append(L)
+
+    best = int(shelter_ids[int(np.argmin(lengths))])
+    return best, lengths
 
 class GraphEvacuationEnv:
     def __init__(self, G, start, goal,
                  risk_weight=15.0,
-                 step_penalty=1.0,
+                 step_penalty=3.0,
                  goal_reward=5000.0,
                  revisit_penalty=10.0,
-                 backtrack_penalty=20.0,
-                 shaping_scale=5.0):
+                 backtrack_penalty=80.0,
+                 shaping_scale=15.0):
         self.G = G
         self.start = int(start)
         self.goal = int(goal)
