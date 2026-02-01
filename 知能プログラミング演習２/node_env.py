@@ -1,6 +1,7 @@
 import osmnx as ox
 import matplotlib.pyplot as plt
 import contextily as ctx
+import numpy as np
 
 place_name = "名古屋工業大学, 愛知県, 日本"
 
@@ -177,6 +178,41 @@ def load_graph_from_csv(nodes_csv="nodes_reduced.csv", edges_csv="edges_reduced.
 
     return nodes_df, edges_df, adj
 
+def pick_evacuee_near_disaster(nodes, disaster_id, radius_m=80, rng=None):
+    """
+    災害ノード disaster_id から半径 radius_m[m] 以内にあるノードを候補として
+    その中から避難者の開始ノードを1つランダムに返す。
+    """
+    if rng is None:
+        rng = np.random.default_rng()
+
+    id_to_node = {n["id"]: n for n in nodes}
+    if disaster_id not in id_to_node:
+        raise ValueError(f"disaster_id {disaster_id} not in nodes")
+
+    dx = id_to_node[disaster_id]["x"]
+    dy = id_to_node[disaster_id]["y"]
+
+    cand = []
+    for n in nodes:
+        d = ((n["x"] - dx)**2 + (n["y"] - dy)**2) ** 0.5
+        if d <= radius_m and n["id"] != disaster_id:
+            cand.append(n["id"])
+
+    if len(cand) == 0:
+        # 候補がないなら半径を広げる（保険）
+        # ここは好みで radius_m を増やして再探索でもOK
+        return disaster_id  # 最悪同じ点（嫌なら raise に変更）
+
+    return int(rng.choice(cand))
+
+def nearest_node_from_place(G, query):
+    """
+    例: query="名古屋工業大学 2号館, 愛知県, 日本"
+    """
+    lat, lon = ox.geocode(query)
+    # nearest_nodes は (X=経度, Y=緯度)
+    return int(ox.distance.nearest_nodes(G, X=lon, Y=lat))
 
 class NodeEnv:
     """
