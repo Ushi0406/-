@@ -3,6 +3,7 @@ import random
 import cv2
 import numpy as np
 import networkx as nx
+import matplotlib.pyplot as plt
 
 from env_graph import GraphEvacuationEnv
 from q_learning import QLearningAgent
@@ -337,6 +338,80 @@ def build_simple_instructions(nodes_xy, path, max_steps=20):
     instr.append(f"到着: ノード {path[-1]}")
     return instr
 
+def plot_learning_curves(episode_rewards, episode_path_lengths, epsilon_history, shortest_path_len, save_path="learning_curves.png"):
+    """
+    学習過程を複数のグラフで可視化
+    
+    Args:
+        episode_rewards: 各エピソードの累積報酬リスト
+        episode_path_lengths: 各エピソードの経路長リスト
+        epsilon_history: 各エピソードのε値リスト
+        shortest_path_len: 最短経路の長さ（比較用）
+        save_path: 保存ファイルパス
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig.suptitle("Q-Learning Training Curves", fontsize=16, fontweight='bold')
+    
+    # グラフ1: エピソードごとの報酬
+    ax = axes[0, 0]
+    ax.plot(episode_rewards, linewidth=0.8, alpha=0.7, label="Reward")
+    # 移動平均を表示
+    window = max(1, len(episode_rewards) // 50)
+    if len(episode_rewards) > window:
+        ma = np.convolve(episode_rewards, np.ones(window)/window, mode='valid')
+        ax.plot(range(window-1, len(episode_rewards)), ma, linewidth=2, label=f"Moving Avg (window={window})", color='red')
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Cumulative Reward")
+    ax.set_title("1. Cumulative Reward per Episode")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # グラフ2: エピソードごとの経路長
+    ax = axes[0, 1]
+    ax.plot(episode_path_lengths, linewidth=0.8, alpha=0.7, label="Path Length", color='orange')
+    ax.axhline(y=shortest_path_len, color='green', linestyle='--', linewidth=2, label=f"Shortest Path ({shortest_path_len:.1f})")
+    # 移動平均
+    if len(episode_path_lengths) > window:
+        ma = np.convolve(episode_path_lengths, np.ones(window)/window, mode='valid')
+        ax.plot(range(window-1, len(episode_path_lengths)), ma, linewidth=2, label="Moving Avg", color='red')
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Path Length")
+    ax.set_title("2. Path Length per Episode")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    
+    # グラフ3: ε（探索率）の減衰
+    ax = axes[1, 0]
+    ax.plot(epsilon_history, linewidth=2, label="Epsilon", color='purple')
+    ax.set_xlabel("Episode")
+    ax.set_ylabel("Epsilon (Exploration Rate)")
+    ax.set_title("3. Epsilon Decay")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    ax.set_ylim([0, 1.05])
+    
+    # グラフ4: 経路長の改善率
+    ax = axes[1, 1]
+    valid_lengths = [l for l in episode_path_lengths if l > 0]
+    if valid_lengths:
+        initial_avg = np.mean(valid_lengths[:max(1, len(valid_lengths)//10)])
+        improvement = [(initial_avg - l) / initial_avg * 100 if l > 0 else 0 for l in episode_path_lengths]
+        ax.plot(improvement, linewidth=1, alpha=0.7, label="Improvement Rate", color='brown')
+        if len(improvement) > window:
+            ma = np.convolve(improvement, np.ones(window)/window, mode='valid')
+            ax.plot(range(window-1, len(improvement)), ma, linewidth=2, label="Moving Avg", color='red')
+        ax.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+        ax.set_xlabel("Episode")
+        ax.set_ylabel("Improvement Rate (%)")
+        ax.set_title("4. Improvement from Initial")
+        ax.grid(True, alpha=0.3)
+        ax.legend()
+    
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=100, bbox_inches='tight')
+    print(f"Learning curves saved: {save_path}")
+    plt.close()
+
 def choose_nearer_shelter(G, start_id, shelter_ids, weight="length"):
     """
     start_id から shelter_ids の各避難所までの最短経路長を計算し、
@@ -529,23 +604,38 @@ def main():
 
     episodes = 20000
     max_steps = 700
+    
+    # 学習記録用
+    episode_rewards = []
+    episode_path_lengths = []
+    epsilon_history = []
 
     for ep in range(episodes):
         s = env.reset()
+        episode_reward = 0.0
         for _ in range(max_steps):
             a = agent.choose_action(env, s)
             if a is None:
                 break
             s2, r, done, _ = env.step(a)
+            episode_reward += r
             agent.update(env, s, a, r, s2, done)
             s = s2
             if done:
                 break
         agent.decay_epsilon()
+        
+        # 学習記録
+        episode_rewards.append(episode_reward)
+        epsilon_history.append(agent.epsilon)
+        
+        # 現在のgreedy経路を取得
+        greedy_path = greedy_path_from_Q(env, agent, max_steps=800)
+        episode_path_lengths.append(len(greedy_path))
 
         # 途中経過を少し表示（重いなら消してOK）
         if (ep + 1) % 1000 == 0:
-            path = greedy_path_from_Q(env, agent, max_steps=800)
+            path = greedy_path
             ok = (path[-1] == GOAL)
             print(f"ep {ep+1}: greedy_reach_goal={ok}, path_len={len(path)}, eps={agent.epsilon:.3f}")
 
@@ -558,6 +648,9 @@ def main():
         print("RL path cost:", rl_cost, "len:", len(rl_path))
 
     print("RL path:", rl_path)
+    
+    # 学習曲線グラフを出力
+    plot_learning_curves(episode_rewards, episode_path_lengths, epsilon_history, sp_cost, save_path="learning_curves.png")
 
     # 描画：最短路とRL路を比較したければ2枚作る
     draw_path_on_image(IMG_PATH, nodes_xy, sp, out_path="evac_shortest.png", disaster=disaster, label_nodes=False)
